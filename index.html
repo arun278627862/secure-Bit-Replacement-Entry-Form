@@ -111,6 +111,15 @@
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
+
+        button.edit-entry-btn {
+            background-color: #ffc107; /* Amber */
+            color: black;
+            padding: 6px 12px;
+            font-size: 0.9em;
+            margin-right: 5px; /* Space if you add more action buttons */
+        }
+        button.edit-entry-btn:hover { background-color: #e0a800; }
     </style>
 </head>
 <body>
@@ -248,6 +257,10 @@
         updateDateTime();
         setInterval(updateDateTime, 1000);
 
+        const correctPassword = "secure"; // Centralized password
+
+        let editingEntryIndex = null; // To store the index of the entry being edited
+
         // Supervisor Data
         const supervisors = [
             { empNo: "47042", name: "Arun Kumar" },
@@ -307,15 +320,22 @@
             // Create table headers from the keys of the first entry
             const headers = Object.keys(entries[0]);
             const headerRow = document.createElement('tr');
+            
             headers.forEach(headerText => {
                 const th = document.createElement('th');
                 th.textContent = headerText.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()); // Prettify header
                 th.style.border = "1px solid #ddd";
                 th.style.padding = "8px";
                 th.style.textAlign = "left";
-                th.style.backgroundColor = "var(--light)";
+                th.style.backgroundColor = "var(--primary)";
+                th.style.color = "var(--light)";
                 headerRow.appendChild(th);
             });
+            // Add Actions header
+            const actionTh = document.createElement('th');
+            actionTh.textContent = "Actions";
+            actionTh.style.cssText = "border: 1px solid #ddd; padding: 8px; text-align: left; background-color: var(--primary); color: var(--light);";
+            headerRow.appendChild(actionTh);
             entriesTableHead.appendChild(headerRow);
 
             // Populate table rows
@@ -328,19 +348,69 @@
                     cell.style.padding = "8px";
                     row.appendChild(cell);
                 });
+
+                // Add Edit button cell
+                const actionCell = document.createElement('td');
+                actionCell.style.border = "1px solid #ddd";
+                actionCell.style.padding = "8px";
+                const editButton = document.createElement('button');
+                editButton.innerHTML = '<i class="fas fa-edit"></i> Edit';
+                editButton.classList.add('edit-entry-btn');
+                editButton.setAttribute('data-index', entries.indexOf(entry)); // Store index
+                actionCell.appendChild(editButton);
+                row.appendChild(actionCell);
+
                 entriesTableBody.appendChild(row);
             });
         }
 
-        // Form handling
-        document.getElementById('dataForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const currentEntry = {
+        // Event listener for edit buttons (using event delegation)
+        entriesTableBody.addEventListener('click', function(event) {
+            if (event.target.closest('.edit-entry-btn')) {
+                const button = event.target.closest('.edit-entry-btn');
+                const indexToEdit = parseInt(button.getAttribute('data-index'));
+                loadEntryForEditing(indexToEdit);
+            }
+        });
+
+        function loadEntryForEditing(index) {
+            const entries = JSON.parse(localStorage.getItem('bitEntries') || '[]');
+            if (index < 0 || index >= entries.length) {
+                console.error("Invalid index for editing:", index);
+                return;
+            }
+            const entryToEdit = entries[index];
+            editingEntryIndex = index;
+
+            // Populate form fields - Date and Time are readonly, will show original entry's D/T
+            document.getElementById('autoDate').value = entryToEdit.date;
+            document.getElementById('autoTime').value = entryToEdit.time;
+            document.querySelector('[name="partNo"]').value = entryToEdit.partNo || '';
+            document.querySelector('[name="bitType"]').value = entryToEdit.bitType || '';
+            document.querySelector('[name="bitSize"]').value = entryToEdit.bitSize || '';
+            document.querySelector('[name="bitQuantity"]').value = entryToEdit.bitQuantity || '';
+            document.querySelector('[name="replacementReason"]').value = entryToEdit.replacementReason || '';
+            document.querySelector('[name="oldTipTemperature"]').value = entryToEdit.oldTipTemperature || '';
+            document.querySelector('[name="newTipTemperature"]').value = entryToEdit.newTipTemperature || '';
+            document.querySelector('[name="lineNo"]').value = entryToEdit.lineNo || '';
+            document.querySelector('[name="stageNo"]').value = entryToEdit.stageNo || '';
+            document.querySelector('[name="isNo"]').value = entryToEdit.isNo || '';
+            document.getElementById('supervisorName').value = entryToEdit.supervisorName || '';
+            document.getElementById('supervisorEmpNo').value = entryToEdit.supervisorEmpNo || '';
+            document.querySelector('[name="givenBy"]').value = entryToEdit.givenBy || '';
+
+            // Change submit button text and scroll to form
+            document.querySelector('#dataForm button[type="submit"]').innerHTML = '<i class="fas fa-save"></i> Update Entry';
+            document.getElementById('dataForm').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function getFormDataObject(formElement) {
+            const formData = new FormData(formElement);
+            return {
                 date: document.getElementById('autoDate').value,
                 time: document.getElementById('autoTime').value,
                 partNo: formData.get('partNo').toUpperCase(),
-                bitType: formData.get('bitType').toUpperCase(), // Already uppercase from select, but good practice
+                bitType: formData.get('bitType').toUpperCase(),
                 bitSize: formData.get('bitSize').toUpperCase(),
                 bitQuantity: formData.get('bitQuantity'),
                 replacementReason: formData.get('replacementReason').toUpperCase(),
@@ -349,17 +419,36 @@
                 lineNo: formData.get('lineNo').toUpperCase(),
                 stageNo: formData.get('stageNo').toUpperCase(),
                 isNo: formData.get('isNo').toUpperCase(),
-                supervisorName: formData.get('supervisorName').toUpperCase(), // Autofill handles case, but this ensures consistency if typed
-                supervisorEmpNo: formData.get('supervisorEmpNo'), // Typically numbers or specific case, leave as is or uppercase if desired
+                supervisorName: formData.get('supervisorName').toUpperCase(),
+                supervisorEmpNo: formData.get('supervisorEmpNo'),
                 givenBy: formData.get('givenBy').toUpperCase()
             };
+        }
+
+        // Form handling
+        document.getElementById('dataForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const currentEntry = getFormDataObject(e.target);
  
-            // Save current entry to localStorage
             let entries = JSON.parse(localStorage.getItem('bitEntries') || '[]');
-            entries.push(currentEntry);
+
+            if (editingEntryIndex !== null) {
+                // Editing an existing entry
+                const password = prompt("Please enter the password to update this entry:");
+                if (password === null) { alert("Update cancelled."); return; }
+                if (password !== correctPassword) { alert("Incorrect password. Entry not updated."); return; }
+
+                entries[editingEntryIndex] = currentEntry;
+                alert('Entry updated successfully!');
+                editingEntryIndex = null; // Reset editing state
+                document.querySelector('#dataForm button[type="submit"]').innerHTML = '<i class="fas fa-save"></i> Submit Entry';
+            } else {
+                // Adding a new entry
+                entries.push(currentEntry);
+                alert('Entry saved successfully to local storage!');
+            }
+            
             localStorage.setItem('bitEntries', JSON.stringify(entries));
- 
-            alert('Entry saved successfully to local storage!');
             e.target.reset();
             updateDateTime(); // Refresh date/time for the next entry
             displayEntries(); // Update the displayed table
@@ -369,12 +458,16 @@
         document.getElementById('resetFormBtn').addEventListener('click', function() {
             document.getElementById('dataForm').reset(); // Resets all form fields to their initial state
             updateDateTime(); // Updates the auto-generated date and time
+            if (editingEntryIndex !== null) {
+                editingEntryIndex = null; // Cancel editing mode
+                document.querySelector('#dataForm button[type="submit"]').innerHTML = '<i class="fas fa-save"></i> Submit Entry';
+                alert("Edit cancelled. Form has been reset.");
+            }
         });
 
         // Clear All Entries button handling
         document.getElementById('clearEntriesBtn').addEventListener('click', function() {
             const password = prompt("Please enter the password to clear all entries:");
-            const correctPassword = "secure"; // Define your password here
 
             if (password === null) { // User clicked Cancel or closed the prompt
                 return;
@@ -403,6 +496,19 @@
                 reader.onload = function(e) {
                     const csvText = e.target.result;
                     try {
+                        const loadPassword = prompt("Please enter the password to load data from CSV:");
+                        if (loadPassword === null) {
+                            alert("CSV loading cancelled.");
+                            event.target.value = null; // Reset file input
+                            return;
+                        }
+                        if (loadPassword !== correctPassword) {
+                            alert("Incorrect password. Data not loaded.");
+                            event.target.value = null; // Reset file input
+                            return;
+                        }
+
+                        // Proceed with parsing and loading if password is correct
                         const loadedEntries = parseCSV(csvText);
                         if (loadedEntries.length === 0) {
                             alert("No valid entries found in the CSV file or the file is empty.");
